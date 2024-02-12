@@ -1,2 +1,1 @@
-﻿  MyApplication.cpp
-  MyOpenGLExample.vcxproj -> F:\OpenGL\Test\MyOpenGLExample\x64\Debug\MyOpenGLExample.exe
+﻿LINK : fatal error LNK1168: cannot open F:\OpenGL\Test\MyOpenGLExample\x64\Debug\MyOpenGLExample.exe for writing
