@@ -288,7 +288,6 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     unsigned int fileLen = file.tellg();
     file.seekg(std::ios::beg);
     
-    //Se lee el fichero
     char * source = new char[fileLen + 1];
     int i = 0;
     
