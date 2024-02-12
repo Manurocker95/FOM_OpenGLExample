@@ -194,7 +194,7 @@ void WindowRescaling(GLFWwindow* _window, GLsizei w, GLsizei h)
 /// Let's add some rotation to our model
 /// </summary>
 /// <param name="_window"></param>
-void IdleMovement(GLFWwindow* _window)
+void IdleMovement()
 {
     m_angle = (m_angle < 3.141599f * 2.0f) ? m_angle + 0.003f : 0.0f;
     m_model[0] = (GLfloat)((1.0f / sqrt(2.0f)) * sin((float)m_angle / 2.0f));
@@ -466,7 +466,7 @@ int main(void)
     /* Loop until the user closes the window */
     while (IsApplicationRunning(window))
     {
-        IdleMovement(window);
+        IdleMovement();
         Repaint(window, loadedShaders);
         ManageEvents(window);
     }
