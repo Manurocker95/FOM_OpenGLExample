@@ -54,7 +54,7 @@ GLfloat m_proyectionMatrix[] =
 /// <summary>
 /// View matrix
 /// </summary>
-GLfloat view[] = 
+GLfloat m_view[] =
 { 
     1.0f,0.0f,0.0f,0.0f,
     0.0f,1.0f,0.0f,0.0f,
@@ -82,7 +82,7 @@ GLint m_uniformProyectionID = -1;
 GLint m_uniformViewID = -1;
 GLint m_uniformModelID = -1;
 
-//Atributos
+//Attributes
 GLint m_inColorID = -1;
 GLint m_inVertexID = -1;
 
@@ -108,7 +108,7 @@ void DebugLog(std::string _log)
 }
 
 /// <summary>
-/// Initialize the libraries!
+/// Initialize the OpenGL libraries!
 /// </summary>
 /// <returns></returns>
 int InitLibraries()
@@ -119,6 +119,10 @@ int InitLibraries()
     return 0;
 }
 
+/// <summary>
+/// Initialize Extensions: GLEW library!
+/// </summary>
+/// <returns></returns>
 int InitGLEW()
 {
     glewExperimental = GL_TRUE;
@@ -131,6 +135,14 @@ int InitGLEW()
 
     return 0;
 }
+
+/// <summary>
+/// Create the window and the context for OpenGL
+/// </summary>
+/// <param name="_title"></param>
+/// <param name="_width"></param>
+/// <param name="_height"></param>
+/// <returns></returns>
 
 GLFWwindow * InitWindowContext(const char * _title, int _width, int _height)
 {
@@ -147,6 +159,13 @@ GLFWwindow * InitWindowContext(const char * _title, int _width, int _height)
     return _window;
 }
 
+/// <summary>
+/// We build our projection matrix based on our camera setup
+/// </summary>
+/// <param name="fov"></param>
+/// <param name="ratio"></param>
+/// <param name="nearPlane"></param>
+/// <param name="farPlane"></param>
 void BuildProjectionMatrix(float fov, float ratio, float nearPlane, float farPlane)
 {
     float f = 1.0f / tan(fov * (3.141599f / 360.0f));
@@ -159,13 +178,22 @@ void BuildProjectionMatrix(float fov, float ratio, float nearPlane, float farPla
     m_proyectionMatrix[3 * 4 + 3] = 0.0f;
 }
 
+/// <summary>
+/// If we want to reescale the viewport, we can call it from funcs, but remember GLFW doesn't work with callbacks
+/// </summary>
+/// <param name="_window"></param>
+/// <param name="w"></param>
+/// <param name="h"></param>
 void WindowRescaling(GLFWwindow* _window, GLsizei w, GLsizei h)
 {
     glViewport(0, 0, w, h);
     BuildProjectionMatrix(45.0f, h / w, 0.1f, 50.0f);
 }
 
-
+/// <summary>
+/// Let's add some rotation to our model
+/// </summary>
+/// <param name="_window"></param>
 void IdleMovement(GLFWwindow* _window)
 {
     m_angle = (m_angle < 3.141599f * 2.0f) ? m_angle + 0.003f : 0.0f;
@@ -175,12 +203,22 @@ void IdleMovement(GLFWwindow* _window)
     m_model[3] = (GLfloat)cos((float)m_angle / 2.0f);
 }
 
-
+/// <summary>
+/// Generic method to check keyboard key press
+/// </summary>
+/// <param name="window"></param>
+/// <param name="key"></param>
+/// <returns></returns>
 bool IsKeyPressed(GLFWwindow* window, int key)
 {
     return (glfwGetKey(window, key) == GLFW_PRESS);
 }
 
+/// <summary>
+/// Repaint of our scene (only render the vertices if we are using the shaders to avoid crashes with the program)
+/// </summary>
+/// <param name="_window"></param>
+/// <param name="_loadedShaders"></param>
 void Repaint(GLFWwindow * _window, bool _loadedShaders)
 {
     /* Clear last frame */
@@ -191,7 +229,7 @@ void Repaint(GLFWwindow * _window, bool _loadedShaders)
         glUseProgram(m_programID);
         glUniform1f(m_uniformTransparencyID, 1.0f);
         glUniform4fv(m_uniformModelID, 1, m_model);
-        glUniformMatrix4fv(m_uniformViewID, 1, GL_FALSE, view);
+        glUniformMatrix4fv(m_uniformViewID, 1, GL_FALSE, m_view);
         glUniformMatrix4fv(m_uniformProyectionID, 1, GL_FALSE, m_proyectionMatrix);
 
         /*Paint the buffer */
@@ -204,11 +242,20 @@ void Repaint(GLFWwindow * _window, bool _loadedShaders)
     glfwSwapBuffers(_window);
 }
 
+/// <summary>
+/// GLFW loop check
+/// </summary>
+/// <param name="_window"></param>
+/// <returns></returns>
 bool IsApplicationRunning(GLFWwindow* _window)
 {
     return !glfwWindowShouldClose(_window);
 }
 
+/// <summary>
+/// Manage key events
+/// </summary>
+/// <param name="_window"></param>
 void ManageEvents(GLFWwindow* _window)
 {
     if (IsKeyPressed(_window, GLFW_KEY_ESCAPE))
@@ -219,6 +266,12 @@ void ManageEvents(GLFWwindow* _window)
     glfwPollEvents();
 }
 
+/// <summary>
+/// Load the shader from file. We could add the string directly but w/e
+/// </summary>
+/// <param name="_fileName"></param>
+/// <param name="_type"></param>
+/// <returns></returns>
 GLuint LoadShader(const char * _fileName, GLenum _type)
 {
     /* We load the shader */
@@ -231,7 +284,6 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
         return 0;
     }
 
-    //Se calculala longituddel fichero
     file.seekg(0, std::ios::end);
     unsigned int fileLen = file.tellg();
     file.seekg(std::ios::beg);
@@ -255,14 +307,12 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     glShaderSource(shader, 1, (const GLchar**) &source, (const GLint*)&fileLen);
     glCompileShader(shader);
     delete[] source;
-    
-    //Comprobamosque se compilobien
+
     GLint compiled;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
 
     if (!compiled)
     {
-        //Calculamosunacadenade error
         GLint logLen;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH,&logLen);
         char* logString = new char[logLen];
@@ -275,6 +325,10 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     return shader;
 }
 
+/// <summary>
+/// Initialization of the shaders 
+/// </summary>
+/// <returns></returns>
 bool InitializeShaders()
 {
     //We compile our vertex and fragment shaders
@@ -325,6 +379,9 @@ bool InitializeShaders()
     return true;
 }
 
+/// <summary>
+/// Initialization of the cube VBO and VAO
+/// </summary>
 void InitializeSceneObjects()
 {
     glEnable(GL_DEPTH_TEST);
@@ -332,6 +389,7 @@ void InitializeSceneObjects()
     BuildProjectionMatrix(45.0f, 4.0f / 3.0f, 0.1f, 50.0f);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     glEnable(GL_CULL_FACE);
+    
     glGenVertexArrays(1, &m_vao);
     glBindVertexArray(m_vao);
     glGenBuffers(3, m_vbo);
@@ -347,11 +405,18 @@ void InitializeSceneObjects()
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(m_cubeStrips), m_cubeStrips,GL_STATIC_DRAW);
 }
 
+/// <summary>
+/// Free OpenGL libraries
+/// </summary>
 void FreeLibraries()
 {
     glfwTerminate();
 }
 
+/// <summary>
+/// Free buffers, shaders, program and ofc, OpenGL context
+/// </summary>
+/// <param name="_loadedShaders"></param>
 void FreeResources(bool _loadedShaders)
 {
     if (_loadedShaders)
@@ -371,7 +436,11 @@ void FreeResources(bool _loadedShaders)
     FreeLibraries();
 }
 
-
+/// <summary>
+/// Our main ;)))
+/// </summary>
+/// <param name=""></param>
+/// <returns></returns>
 int main(void)
 {
     /* Initialize GLFW (OpenGL library) */
