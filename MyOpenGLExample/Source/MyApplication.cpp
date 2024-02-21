@@ -312,7 +312,6 @@ void ConfigureTextureData()
     int width, height, nchan;
     stbi_set_flip_vertically_on_load(true);
     unsigned char* img = stbi_load(RESOURCES_PATH("Textures/colorMap.png"), &width, &height, &nchan, STBI_rgb_alpha);
-    //stbi_uc* img = stbi_load_from_memory((const stbi_uc*)devkitlenny_png, devkitlenny_png_size, &width, &height, &nchan, 4);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img);
     stbi_image_free(img);
 
