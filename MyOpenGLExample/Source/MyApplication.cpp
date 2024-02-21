@@ -1,150 +1,123 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <cmath>
 
+//#define ENABLE_NXLINK
+#define GLFW_INCLUDE_NONE
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+// GLM headers
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_PURE
+#include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
+#include <glm/mat4x4.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
-/// <summary>
-/// Cube definition
-/// </summary>
-const GLfloat m_cubeVertices[] = 
-{
-    -1.0f, -1.0f, 1.0f,
-    1.0f, -1.0f, 1.0f,
-    -1.0f, 1.0f, 1.0f,
-    1.0f, 1.0f, 1.0f,
-    -1.0f, -1.0f, -1.0f,
-    1.0f, -1.0f, -1.0f,
-    -1.0f, 1.0f, -1.0f,
-    1.0f, 1.0f, -1.0f,
-};
+#include "stb_image.h"
+#include "Cube.h"
 
-const GLuint m_numberOfCubeVertices = 8;
-const GLushort m_cubeStrips[] = { 7,6,3,2,1,0,5,4,0,2,4,6,5,7,1,3 };
-const GLuint m_numberOfCubeStrips = 8;
 
-/// <summary>
-/// Cube color per vertex
-/// </summary>
-const GLfloat m_cubeVertexColor[] = 
-{
-    1.0f, 0.0f, 0.0f,
-    1.0f, 0.0f, 0.0f,
-    1.0f, 0.0f, 0.0f,
-    1.0f, 0.0f, 0.0f,
-    1.0f, 1.0f, 0.0f,
-    1.0f, 1.0f, 0.0f,
-    1.0f, 1.0f, 0.0f,
-    1.0f, 1.0f, 0.0f
-};
+#ifndef __SWITCH__
+#define RESOURCES_PATH(_str) "Resources/" _str
+#else
+#define RESOURCES_PATH(_str) "romfs:/" _str
+#endif
 
-/// <summary>
-/// Proyection Matrix
-/// </summary>
-GLfloat m_proyectionMatrix[] = 
-{ 
-    1.0f,0.0f,0.0f,0.0f,
-    0.0f,1.0f,0.0f,0.0f,
-    0.0f,0.0f,1.0f,0.0f,
-    0.0f,0.0f,0.0f,1.0f 
-};
-
-/// <summary>
-/// View matrix
-/// </summary>
-GLfloat m_view[] =
-{ 
-    1.0f,0.0f,0.0f,0.0f,
-    0.0f,1.0f,0.0f,0.0f,
-    0.0f,0.0f,1.0f,0.0f,
-    0.0f,0.0f,-10.0f,1.0f 
-};
-
-/// <summary>
-/// Model vector
-/// </summary>
-GLfloat m_model[] = { 1.0f,0.0f,0.0f,0.0f };
-/// <summary>
-/// Current angle
-/// </summary>
-GLfloat m_angle = 0.0f;
-
-//Shaders
+// -----------------------------------------------------------------
+// * Shaders
+// -----------------------------------------------------------------
 GLuint m_vertexShaderID = 0;
 GLuint m_fragmentShaderID = 0;
 GLuint m_programID = 0;
 
-//Variables Uniform
-GLint m_uniformTransparencyID = -1;
-GLint m_uniformProyectionID = -1;
-GLint m_uniformViewID = -1;
-GLint m_uniformModelID = -1;
+// -----------------------------------------------------------------
+// * Uniform Variables
+// -----------------------------------------------------------------
+GLint m_uModelID = -1;
+GLint m_uProjectionID = -1;
 
-//Attributes
-GLint m_inColorID = -1;
+GLint m_uLightPosID = -1;
+GLint m_uAmbientID = -1;
+GLint m_uDiffuseID = -1;
+GLint m_uSpecularID = -1;
+GLint m_uColorMapID;
+
+// -----------------------------------------------------------------
+// * Attribute Variables
+// -----------------------------------------------------------------
 GLint m_inVertexID = -1;
+GLint m_inTexCoordsID = -1;
+GLint m_inNormalsID = -1;
 
-//Vertex Array Object
+// -----------------------------------------------------------------
+// * Buffers
+// -----------------------------------------------------------------
 GLuint m_vao;
+GLuint m_vbo;
+GLuint m_texUnit0;
 
-//Vertex Buffer Object
-GLuint m_vbo[3];
+// -----------------------------------------------------------------
+// * Constants
+// -----------------------------------------------------------------
+constexpr double TAU = 6.2831855;
 
-#define vbuffer m_vbo[0]
-#define cbuffer m_vbo[1]
-#define pbuffer m_vbo[2]
+// -----------------------------------------------------------------
+// * Others
+// -----------------------------------------------------------------
+double m_startTicks;
+double m_rotationSpeed = 1.0;
 
-void DebugLog(const char* _log)
+
+void DebugLog(const char * _str)
 {
-    std::cout << _log << std::endl;
+    printf(_str);
 }
 
-
-void DebugLog(std::string _log)
+void DebugLog(std::string _str)
 {
-    std::cout << _log << std::endl;
+    DebugLog(_str.c_str());
 }
 
-/// <summary>
-/// Initialize the OpenGL libraries!
-/// </summary>
-/// <returns></returns>
-int InitLibraries()
+void DebugOpenGLInfo()
 {
-    if (!glfwInit())
-        return -1;
+    std::string strVendor = (const char*)glGetString(GL_VENDOR);
+    std::string strRender = (const char*)glGetString(GL_RENDERER);
+    std::string strVersion = (const char*)glGetString(GL_VERSION);
 
-    return 0;
+    DebugLog(std::string("GL Vendor: ") + strVendor + "\n");
+    DebugLog(std::string("GL Renderer: ") + strRender + "\n");
+    DebugLog(std::string("GL Version: ") + strVersion + "\n");
 }
 
-/// <summary>
-/// Initialize Extensions: GLEW library!
-/// </summary>
-/// <returns></returns>
-int InitGLEW()
+bool InitializeOpenGLLibrary()
+{
+	return glfwInit();
+}
+
+bool InitializeGLExtensionLibrary()
 {
     glewExperimental = GL_TRUE;
     GLenum err = glewInit();
     if (GLEW_OK != err)
     {
-        printf("Error: %s\n", glewGetErrorString(err));
-        return -1;
+        DebugLog(std::string("Error: %s\n", (const char*)glewGetErrorString(err)));
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
-/// <summary>
-/// Create the window and the context for OpenGL
-/// </summary>
-/// <param name="_title"></param>
-/// <param name="_width"></param>
-/// <param name="_height"></param>
-/// <returns></returns>
+void WindowRescaling(GLFWwindow* _window, GLsizei w, GLsizei h)
+{
+    glViewport(0, 0, w, h);
+   // BuildProjectionMatrix(40.0f, w / h, 0.1f, 1000.0f);
+}
 
-GLFWwindow * InitWindowContext(const char * _title, int _width, int _height)
+GLFWwindow * InitWindowContext(const char* _title, int _width, int _height)
 {
     /* Create a windowed mode window and its OpenGL context */
     GLFWwindow * _window = glfwCreateWindow(_width, _height, _title, NULL, NULL);
@@ -154,130 +127,28 @@ GLFWwindow * InitWindowContext(const char * _title, int _width, int _height)
     }
 
     /* Make the window's context current */
+    // Configure window
+    glfwSwapInterval(1);
+    glfwSetInputMode(_window, GLFW_STICKY_KEYS, GLFW_TRUE);
+
+    /* Make the window's context current */
     glfwMakeContextCurrent(_window);
+    glfwSetFramebufferSizeCallback(_window, WindowRescaling);
 
     return _window;
 }
 
-/// <summary>
-/// We build our projection matrix based on our camera setup
-/// </summary>
-/// <param name="fov"></param>
-/// <param name="ratio"></param>
-/// <param name="nearPlane"></param>
-/// <param name="farPlane"></param>
-void BuildProjectionMatrix(float fov, float ratio, float nearPlane, float farPlane)
-{
-    float f = 1.0f / tan(fov * (3.141599f / 360.0f));
-
-    m_proyectionMatrix[0] = f / ratio;
-    m_proyectionMatrix[1 * 4 + 1] = f;
-    m_proyectionMatrix[2 * 4 + 2] = (farPlane + nearPlane) / (nearPlane - farPlane);
-    m_proyectionMatrix[3 * 4 + 2] = (2.0f * farPlane * nearPlane) / (nearPlane - farPlane);
-    m_proyectionMatrix[2 * 4 + 3] = -1.0f;
-    m_proyectionMatrix[3 * 4 + 3] = 0.0f;
-}
-
-/// <summary>
-/// If we want to reescale the viewport, we can call it from funcs, but remember GLFW doesn't work with callbacks
-/// </summary>
-/// <param name="_window"></param>
-/// <param name="w"></param>
-/// <param name="h"></param>
-void WindowRescaling(GLFWwindow* _window, GLsizei w, GLsizei h)
-{
-    glViewport(0, 0, w, h);
-    BuildProjectionMatrix(45.0f, h / w, 0.1f, 50.0f);
-}
-
-/// <summary>
-/// Let's add some rotation to our model
-/// </summary>
-/// <param name="_window"></param>
-void IdleMovement()
-{
-    m_angle = (m_angle < 3.141599f * 2.0f) ? m_angle + 0.003f : 0.0f;
-    m_model[0] = (GLfloat)((1.0f / sqrt(2.0f)) * sin((float)m_angle / 2.0f));
-    m_model[1] = (GLfloat)((1.0f / sqrt(2.0f)) * sin((float)m_angle / 2.0f));
-    m_model[2] = (GLfloat)0.0f;
-    m_model[3] = (GLfloat)cos((float)m_angle / 2.0f);
-}
-
-/// <summary>
-/// Generic method to check keyboard key press
-/// </summary>
-/// <param name="window"></param>
-/// <param name="key"></param>
-/// <returns></returns>
-bool IsKeyPressed(GLFWwindow* window, int key)
-{
-    return (glfwGetKey(window, key) == GLFW_PRESS);
-}
-
-/// <summary>
-/// Repaint of our scene (only render the vertices if we are using the shaders to avoid crashes with the program)
-/// </summary>
-/// <param name="_window"></param>
-/// <param name="_loadedShaders"></param>
-void Repaint(GLFWwindow * _window, bool _loadedShaders)
-{
-    /* Clear last frame */
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    if (_loadedShaders)
-    {
-        glUseProgram(m_programID);
-        glUniform1f(m_uniformTransparencyID, 1.0f);
-        glUniform4fv(m_uniformModelID, 1, m_model);
-        glUniformMatrix4fv(m_uniformViewID, 1, GL_FALSE, m_view);
-        glUniformMatrix4fv(m_uniformProyectionID, 1, GL_FALSE, m_proyectionMatrix);
-
-        /*Paint the buffer */
-        glBindVertexArray(m_vao);
-        glDrawElements(GL_TRIANGLE_STRIP, m_numberOfCubeStrips, GL_UNSIGNED_SHORT, (void*)0);
-        glDrawElements(GL_TRIANGLE_STRIP, m_numberOfCubeStrips, GL_UNSIGNED_SHORT, (void*)(m_numberOfCubeStrips * sizeof(GLushort)));
-    }
-
-    /* Swap front and back buffers */
-    glfwSwapBuffers(_window);
-}
-
-/// <summary>
-/// GLFW loop check
-/// </summary>
-/// <param name="_window"></param>
-/// <returns></returns>
 bool IsApplicationRunning(GLFWwindow* _window)
 {
     return !glfwWindowShouldClose(_window);
 }
 
-/// <summary>
-/// Manage key events
-/// </summary>
-/// <param name="_window"></param>
-void ManageEvents(GLFWwindow* _window)
-{
-    if (IsKeyPressed(_window, GLFW_KEY_ESCAPE))
-        glfwSetWindowShouldClose(_window, true);
-
-
-    /* Poll for and process events */
-    glfwPollEvents();
-}
-
-/// <summary>
-/// Load the shader from file. We could add the string directly but w/e
-/// </summary>
-/// <param name="_fileName"></param>
-/// <param name="_type"></param>
-/// <returns></returns>
-GLuint LoadShader(const char * _fileName, GLenum _type)
+GLuint LoadShader(const char* _fileName, GLenum _type)
 {
     /* We load the shader */
     std::ifstream file;
     file.open(_fileName, std::ios::in);
-    
+
     if (!file)
     {
         DebugLog("Shader file not found " + std::string(_fileName));
@@ -287,10 +158,10 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     file.seekg(0, std::ios::end);
     unsigned int fileLen = file.tellg();
     file.seekg(std::ios::beg);
-    
-    char * source = new char[fileLen + 1];
+
+    char* source = new char[fileLen + 1];
     int i = 0;
-    
+
     while (file.good())
     {
         source[i] = file.get();
@@ -303,7 +174,7 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     // Creation and compilation of the shaders
     GLuint shader;
     shader = glCreateShader(_type);
-    glShaderSource(shader, 1, (const GLchar**) &source, (const GLint*)&fileLen);
+    glShaderSource(shader, 1, (const GLchar**)&source, (const GLint*)&fileLen);
     glCompileShader(shader);
     delete[] source;
 
@@ -313,7 +184,7 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     if (!compiled)
     {
         GLint logLen;
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH,&logLen);
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
         char* logString = new char[logLen];
         glGetShaderInfoLog(shader, logLen, NULL, logString);
         std::cout << "Error: " << logString << std::endl;
@@ -324,33 +195,32 @@ GLuint LoadShader(const char * _fileName, GLenum _type)
     return shader;
 }
 
-/// <summary>
-/// Initialization of the shaders 
-/// </summary>
-/// <returns></returns>
 bool InitializeShaders()
 {
     //We compile our vertex and fragment shaders
-    m_vertexShaderID = LoadShader("Shaders/vshader.glsl", GL_VERTEX_SHADER);
-    m_fragmentShaderID = LoadShader("Shaders/fshader.glsl", GL_FRAGMENT_SHADER);
-    
-    if (m_vertexShaderID == 0 || m_fragmentShaderID == 0)
-        return false;
+    m_vertexShaderID = LoadShader(RESOURCES_PATH("Shaders/vshader.glsl"), GL_VERTEX_SHADER);
+    m_fragmentShaderID = LoadShader(RESOURCES_PATH("Shaders/fshader.glsl"), GL_FRAGMENT_SHADER);
 
-    //Link then to our program
+    if (m_vertexShaderID == 0 || m_fragmentShaderID == 0)
+    {
+        DebugLog(std::string("Shaders not loaded: v=" + m_vertexShaderID + std::string(" f=" + m_fragmentShaderID)));
+        return false;
+    }
+
+    // Create Program
     m_programID = glCreateProgram();
-    
+
+    // Attach shaders to program render pipeline
     glAttachShader(m_programID, m_vertexShaderID);
     glAttachShader(m_programID, m_fragmentShaderID);
-    
-    glBindAttribLocation(m_programID, 0, "inVertex");
-    glBindAttribLocation(m_programID, 1, "inColor");
+
+    //Link shaders to our program
     glLinkProgram(m_programID);
 
     //Error debugging
     int linked;
     glGetProgramiv(m_programID, GL_LINK_STATUS, &linked);
-    
+
     if (!linked)
     {
         // Error msg length
@@ -358,7 +228,7 @@ bool InitializeShaders()
         glGetProgramiv(m_programID, GL_INFO_LOG_LENGTH, &logLen);
         char* logString = new char[logLen];
         glGetProgramInfoLog(m_programID, logLen, NULL, logString);
-        std::cout << "Error: " << logString << std::endl;
+        DebugLog(std::string("Shader error: ") + std::string(logString));
         delete[] logString;
         glDeleteProgram(m_programID);
         m_programID = 0;
@@ -366,112 +236,234 @@ bool InitializeShaders()
     }
 
     //uniform variables
-    m_uniformTransparencyID = glGetUniformLocation(m_programID, "transparency");
-    m_uniformProyectionID = glGetUniformLocation(m_programID, "proy");
-    m_uniformViewID = glGetUniformLocation(m_programID, "view");
-    m_uniformModelID = glGetUniformLocation(m_programID, "rot");
-    
-    //Attributes
-    m_inColorID = glGetAttribLocation(m_programID, "inColor");
-    m_inVertexID = glGetAttribLocation(m_programID, "inVertex");
+    m_uModelID = glGetUniformLocation(m_programID, "modelMatrix");
+    m_uProjectionID = glGetUniformLocation(m_programID, "projectionMatrix");
+    m_uLightPosID = glGetUniformLocation(m_programID, "lightPos");
+    m_uAmbientID = glGetUniformLocation(m_programID, "ambient");
+    m_uDiffuseID = glGetUniformLocation(m_programID, "diffuse");
+    m_uSpecularID = glGetUniformLocation(m_programID, "specular");
+    m_uColorMapID = glGetUniformLocation(m_programID, "colorMap");
+
+    // Attributes
+    m_inVertexID = glGetAttribLocation(m_programID, "inPos");
+    m_inTexCoordsID = glGetAttribLocation(m_programID, "inTexCoord");
+    m_inNormalsID = glGetAttribLocation(m_programID, "inNormal");
 
     return true;
 }
 
-/// <summary>
-/// Initialization of the cube VBO and VAO
-/// </summary>
-void InitializeSceneObjects()
+void SetUniformVariablesValues()
 {
-    glEnable(GL_DEPTH_TEST);
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-    BuildProjectionMatrix(45.0f, 4.0f / 3.0f, 0.1f, 50.0f);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    glEnable(GL_CULL_FACE);
-    
-    glGenVertexArrays(1, &m_vao);
-    glBindVertexArray(m_vao);
-    glGenBuffers(3, m_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(m_cubeVertices), m_cubeVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(m_inVertexID, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(m_inVertexID);
-    glBindBuffer(GL_ARRAY_BUFFER, cbuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(m_cubeVertexColor), m_cubeVertexColor, GL_STATIC_DRAW);
-    glVertexAttribPointer(m_inColorID, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(m_inColorID);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pbuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(m_cubeStrips), m_cubeStrips,GL_STATIC_DRAW);
+    glUseProgram(m_programID);
+    auto projection = glm::perspective(60.0f * (float)TAU / 360.0f, 1280.0f / 720.0f, 0.01f, 1000.0f);
+    glUniformMatrix4fv(m_uProjectionID, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniform4f(m_uLightPosID, 0.0f, 0.0f, 0.5f, 1.0f);
+    glUniform3f(m_uAmbientID, 0.1f, 0.1f, 0.1f);
+    glUniform3f(m_uDiffuseID, 0.4f, 0.4f, 0.4f);
+    glUniform4f(m_uSpecularID, 0.5f, 0.5f, 0.5f, 20.0f);
+    glUniform1i(m_uColorMapID, 0);
 }
 
-/// <summary>
-/// Free OpenGL libraries
-/// </summary>
-void FreeLibraries()
+void ConfigureDepthTest()
+{
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+}
+
+void ConfigureVertexData()
+{
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(m_vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(m_cubeVertices), m_cubeVertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texcoord));
+    glEnableVertexAttribArray(1);
+
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+    glEnableVertexAttribArray(2);
+
+
+    // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
+    // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
+    glBindVertexArray(0);
+}
+
+void ConfigureTextureData()
+{
+    // Textures
+    glGenTextures(1, &m_texUnit0);
+    glActiveTexture(GL_TEXTURE0); // activate the texture unit first before binding texture
+    glBindTexture(GL_TEXTURE_2D, m_texUnit0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int width, height, nchan;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* img = stbi_load(RESOURCES_PATH("Textures/colorMap.png"), &width, &height, &nchan, STBI_rgb_alpha);
+    //stbi_uc* img = stbi_load_from_memory((const stbi_uc*)devkitlenny_png, devkitlenny_png_size, &width, &height, &nchan, 4);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img);
+    stbi_image_free(img);
+
+}
+
+bool InitializeScene()
+{
+    bool initShaders = InitializeShaders();
+    if (!initShaders)
+    {
+        return false;
+    }
+    
+    ConfigureDepthTest();
+    
+    ConfigureVertexData();
+    ConfigureTextureData();
+
+    SetUniformVariablesValues();
+
+    m_startTicks = glfwGetTime();
+
+    return true;
+}
+
+double GetDeltaTime()
+{
+    return  glfwGetTime() - m_startTicks;
+}
+
+void InitializeInputs()
+{
+
+}
+
+void UpdateScene()
+{
+    auto dt = GetDeltaTime();
+    glm::mat4 mdlvMtx{ 1.0 };
+    float mv = (float)(m_rotationSpeed * dt * TAU) * 0.234375f;
+    mdlvMtx = glm::translate(mdlvMtx, glm::vec3{ 0.0f, 0.0f, -3.0f });
+    mdlvMtx = glm::rotate(mdlvMtx, mv, glm::vec3{ 1.0f, 0.0f, 0.0f });
+    mdlvMtx = glm::rotate(mdlvMtx, mv * 0.5f, glm::vec3{ 0.0f, 1.0f, 0.0f });
+    
+    glUniformMatrix4fv(m_uModelID, 1, GL_FALSE, glm::value_ptr(mdlvMtx));
+}
+
+void RenderScene(GLFWwindow* window)
+{
+    glClearColor(0x68 / 255.0f, 0xB0 / 255.0f, 0xD8 / 255.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // draw our textured cube
+    glBindVertexArray(m_vao); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+    glDrawArrays(GL_TRIANGLES, 0, (sizeof(m_cubeVertices) / sizeof(m_cubeVertices[0])));
+}
+
+bool IsKeyPressed(GLFWwindow* window, int key)
+{
+    return (glfwGetKey(window, key) == GLFW_PRESS);
+}
+
+void CloseWindow(GLFWwindow* window)
+{
+    glfwSetWindowShouldClose(window, true);
+}
+
+void ManageInputs(GLFWwindow* window)
+{
+    if (IsKeyPressed(window, GLFW_KEY_ESCAPE))
+    {
+        CloseWindow(window);
+    }
+
+    /* Poll for and process events */
+    glfwPollEvents();
+}
+
+void FreeResources()
+{
+    glDeleteTextures(1, &m_texUnit0);
+    glDeleteBuffers(1, &m_vbo);
+    glDeleteVertexArrays(1, &m_vao);
+    glDeleteProgram(m_programID);
+}
+
+void FreeOpenGLLibraries()
 {
     glfwTerminate();
 }
 
-/// <summary>
-/// Free buffers, shaders, program and ofc, OpenGL context
-/// </summary>
-/// <param name="_loadedShaders"></param>
-void FreeResources(bool _loadedShaders)
+void SwapBuffers(GLFWwindow* _window)
 {
-    if (_loadedShaders)
-    {
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        glDeleteBuffers(3, m_vbo);
-        glBindVertexArray(0);
-        glDeleteVertexArrays(1, &m_vao);
-        glDetachShader(m_programID, m_vertexShaderID);
-        glDetachShader(m_programID, m_fragmentShaderID);
-        glDeleteShader(m_vertexShaderID);
-        glDeleteShader(m_fragmentShaderID);
-        glDeleteProgram(m_programID);
-    }
-
-    FreeLibraries();
+    glfwSwapBuffers(_window);
 }
 
-/// <summary>
-/// Our main ;)))
-/// </summary>
-/// <param name=""></param>
-/// <returns></returns>
-int main(void)
+int main(int argc, char* argv[])
 {
-    /* Initialize GLFW (OpenGL library) */
-    if (InitLibraries() == -1)
-        return -1;
+    // Initialize GLFW (OpenGL library)
+	if (!InitializeOpenGLLibrary())
+	{
+        DebugLog("GLFW couldn't be initialized!\n");
+		return EXIT_FAILURE;
+	}
 
-    GLFWwindow * window = InitWindowContext("Hello World!", 640, 480);
+    GLFWwindow * window = InitWindowContext("Hello World", 1280, 720);
 
     if (window == NULL)
     {
+        DebugLog("GLFW: failed to create window!\n");
         glfwTerminate();
-        return -1;
+        return EXIT_FAILURE;
     }
 
-    // Remember to initialize the extensions AFTER we initialize OpenGL context!
-    if (InitGLEW() == -1)
-        return -1;
+    // Initialize OpenGL Extensions (GLEW)
+    if (!InitializeGLExtensionLibrary())
+    {
+        DebugLog("Extensions couldn't be initialized!\n");
+        glfwTerminate();
+        return EXIT_FAILURE;
+    }
 
-    bool loadedShaders = InitializeShaders();
+    DebugOpenGLInfo();
 
-    if (loadedShaders)
-        InitializeSceneObjects();
+    InitializeInputs();
 
-    /* Loop until the user closes the window */
+    if (!InitializeScene())
+    {
+        DebugLog("The scene couldn't be initialized!\n");
+        glfwTerminate();
+        return EXIT_FAILURE;
+    }
+    
     while (IsApplicationRunning(window))
     {
-        IdleMovement();
-        Repaint(window, loadedShaders);
-        ManageEvents(window);
+        // Update the scene
+        UpdateScene();
+
+        // Render the scene
+        RenderScene(window);
+
+        // Manage key inputs
+        ManageInputs(window);
+
+        /* Swap front and back buffers */
+        SwapBuffers(window);
     }
 
-    FreeResources(loadedShaders);
+    FreeResources();
+    
+    FreeOpenGLLibraries();
 
-    return 0;
+    return EXIT_SUCCESS;
 }
